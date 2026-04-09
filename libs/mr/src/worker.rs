@@ -4,7 +4,10 @@ pub struct KeyValue {
     pub value: String,
 }
 
-pub trait MapReduce {
-    fn map(&self, key: String, value: String) -> Vec<KeyValue>;
-    fn reduce(&self, key: &str, values: &[String]) -> String;
+pub fn worker<M, R>(socketname: &str, map: M, reduce: R)
+where
+    M: Fn(&str, &str) -> Vec<KeyValue>,
+    R: Fn(&str, &[String]) -> String,
+{
+    // Your worker implementation here.
 }

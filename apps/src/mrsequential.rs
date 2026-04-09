@@ -1,4 +1,3 @@
-use mr::worker::MapReduce;
 use mrapps::wc;
 use std::io::Write;
 
@@ -12,11 +11,10 @@ fn main() {
     // pass it to Map,
     // accumalate the intermediate Map output
     let mut interm = Vec::new();
-    let wc = wc::WordCount::default();
     for filename in std::env::args().skip(1) {
         // Assuming the file is small enough to fit in memory, read it all at once
         let contents = std::fs::read_to_string(&filename).expect("cannot read file");
-        let res = wc.map(filename, contents);
+        let res = wc::map(&filename, &contents);
         interm.extend(res);
     }
 
@@ -41,7 +39,7 @@ fn main() {
         for k in i..j {
             values.push(interm[k].value.clone());
         }
-        let output = wc.reduce(&interm[i].key, &values);
+        let output = wc::reduce(&interm[i].key, &values);
         writeln!(ofile, "{} {}", interm[i].key, output).expect("cannot write to output file");
         i = j;
     }

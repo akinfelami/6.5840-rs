@@ -6,6 +6,12 @@ edition = "2024"
 [[bin]]
 name = "mrsequential"
 path = "src/mrsequential.rs"
+[[bin]]
+name = "mrcoordinator"
+path = "src/mrcoordinator.rs"
+[[bin]]
+name = "mrworker"
+path = "src/mrworker.rs"
 
 [dependencies]
 mr = { path = "../libs/mr" }

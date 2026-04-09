@@ -1,0 +1,20 @@
+# Rust build artifacts
+/target/
+
+# Cargo lockfile
+# Keep this tracked for binaries/apps if you want reproducible builds.
+# Ignore it here by default for a library-heavy workspace.
+/Cargo.lock
+
+# Generated MapReduce outputs
+/mr-out-*
+/mr-tmp/
+/apps/mr-out-*
+/apps/mr-tmp/
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS files
+.DS_Store

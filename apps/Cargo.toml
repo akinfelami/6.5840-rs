@@ -1,0 +1,12 @@
+[package]
+name = "apps"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "mrsequential"
+path = "src/mrsequential.rs"
+
+[dependencies]
+mr = { path = "../libs/mr" }
+mrapps = { path = "../libs/mrapps" }

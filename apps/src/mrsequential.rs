@@ -2,19 +2,30 @@ use mrapps::wc;
 use std::io::Write;
 
 fn main() {
+    let args = std::env::args().collect::<Vec<String>>();
     if std::env::args().len() < 2 {
-        eprintln!("Usage: mrsequential inputfiles...");
+        eprintln!("Usage: mrsequential app inputfiles...");
         std::process::exit(1);
     }
+
+    let mode = args[1].as_str();
+
+    let (mapf, redf) = match mode {
+        "wc" => (wc::map, wc::reduce),
+        _ => {
+            eprintln!("Unknown app");
+            std::process::exit(1);
+        }
+    };
 
     // read each input file,
     // pass it to Map,
     // accumalate the intermediate Map output
     let mut interm = Vec::new();
-    for filename in std::env::args().skip(1) {
+    for filename in args.iter().skip(2) {
         // Assuming the file is small enough to fit in memory, read it all at once
         let contents = std::fs::read_to_string(&filename).expect("cannot read file");
-        let res = wc::map(&filename, &contents);
+        let res = mapf(&filename, &contents);
         interm.extend(res);
     }
 
@@ -39,7 +50,7 @@ fn main() {
         for k in i..j {
             values.push(interm[k].value.clone());
         }
-        let output = wc::reduce(&interm[i].key, &values);
+        let output = redf(&interm[i].key, &values);
         writeln!(ofile, "{} {}", interm[i].key, output).expect("cannot write to output file");
         i = j;
     }

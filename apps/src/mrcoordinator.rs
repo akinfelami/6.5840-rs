@@ -15,6 +15,9 @@ async fn main() {
     .await
     .expect("could not start server");
 
+    // The coordinatoe should notice if a worker hasn't completed its task in a reasonable
+    // amount of time (10 seconds for this lab), and give the same task to a different worker.
+
     while m.done() == false {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }

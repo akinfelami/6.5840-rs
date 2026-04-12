@@ -15,6 +15,12 @@ pub struct Coordinator {
 
 impl Coordinator {
     fn new(sockname: String, files: Vec<String>, n_reduce: usize) -> Self {
+        println!(
+            "Coordinator initializing with\nsockname :{}\nfiles: {}\nand {} reduce tasks",
+            sockname,
+            files.join("\n"),
+            n_reduce
+        );
         Coordinator {
             sockname,
             files,

@@ -1,20 +1,23 @@
 use std::env;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     if std::env::args().len() < 3 {
         eprintln!("Usage: mrcoordinator sockname inputfiles...");
         std::process::exit(1);
     }
 
-    let m = mr::coordinator::Coordinator::new(
+    let m = mr::coordinator::Coordinator::make_coordinator(
         env::args().nth(1).unwrap_or_else(|| "sockname".into()),
         env::args().skip(2).collect(),
         10,
-    );
+    )
+    .await
+    .expect("could not start server");
 
     while m.done() == false {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 }

@@ -16,3 +16,4 @@ path = "src/mrworker.rs"
 [dependencies]
 mr = { path = "../libs/mr" }
 mrapps = { path = "../libs/mrapps" }
+tokio = { version = "1.51.1", features = ["full"] }

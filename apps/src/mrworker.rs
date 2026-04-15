@@ -15,7 +15,9 @@ async fn main() {
     // for a new task.
 
     // TODO: using wc as placeholder -- should be plugin-based
-    let w = Worker::new(env::args().nth(1).unwrap());
+    let w = Worker::new(&env::args().nth(1).unwrap());
+    let sockname = env::args().nth(2).unwrap();
+    println!("Worker connecting to coordinator at {}", sockname);
 
     // w.worker(mrapps::wc::map, mrapps::wc::reduce);
     match env::args().nth(1).unwrap().as_str() {
@@ -27,5 +29,5 @@ async fn main() {
     }
 
     println!("trying rpc example...");
-    mr::worker::call_example().await;
+    mr::worker::call_example(&sockname).await;
 }

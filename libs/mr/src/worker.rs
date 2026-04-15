@@ -15,9 +15,9 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(socketname: String) -> Self {
+    pub fn new(socketname: &str) -> Self {
         Worker {
-            coord_sock_name: socketname,
+            coord_sock_name: socketname.to_string(),
         }
     }
 
@@ -75,9 +75,9 @@ impl Worker {
     }
 }
 
-pub async fn call_example() {
+pub async fn call_example(sockname: &str) {
     let args = ExampleArgs { x: 98 };
-    let worker = Worker::new("/tmp/mr-coordinator.sock".to_string());
+    let worker = Worker::new(sockname);
 
     match worker
         .call::<ExampleArgs, ExampleReply>("Coordinator.Example", &args)

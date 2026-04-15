@@ -1,12 +1,32 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, path::PathBuf};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE};
 use rand::RngExt;
 use tokio::{fs::DirBuilder, process::Command, sync::mpsc, time};
 
+fn apps_bin_path(bin: &str) -> PathBuf {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("libs/mr should live under the workspace root");
+
+    let debug_bin = workspace_root.join("target").join("debug").join(bin);
+    if debug_bin.exists() {
+        println!("Using debug bin in {}", debug_bin.as_path().display());
+        return debug_bin;
+    }
+
+    let release_bin = workspace_root.join("target").join("release").join(bin);
+    if release_bin.exists() {
+        return release_bin;
+    }
+
+    debug_bin
+}
+
 pub fn start_worker(app: &str, i: i32, tx: Option<mpsc::Sender<i32>>, sock: &str) {
-    let mut worker = Command::new("cargo")
-        .args(["run", "--bin", "mrworker", app, sock])
+    let mut worker = Command::new(apps_bin_path("mrworker"))
+        .args([app, sock])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .spawn()
@@ -27,8 +47,9 @@ pub async fn run_mr_chan(
     tx: Option<mpsc::Sender<i32>>,
     sock: &str,
 ) {
-    let mut coordinator = Command::new("cargo")
-        .args(["run", "--bin", "mrcoordinator", sock])
+    println!("run_mr_chan");
+    let mut coordinator = Command::new(apps_bin_path("mrcoordinator"))
+        .arg(sock)
         .args(files)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
@@ -50,8 +71,9 @@ pub async fn run_mr_chan(
     fs::remove_file(sock).unwrap();
 }
 
-async fn run_mr(files: &[String], app: &str, n: i32) {
+pub async fn run_mr(files: &[String], app: &str, n: i32) {
     let sock = coordinator_sock();
+    println!("Coordinator sock {}", sock);
     run_mr_chan(files, app, n, None, &sock).await
 }
 
@@ -71,13 +93,13 @@ pub fn coordinator_sock() -> String {
     s
 }
 
-pub async fn mk_correct_output(files: &[String], app: &str, out: &str) {
-    let mut cmd = Command::new("cargo")
-        .args(["run", "--bin", "mrsequential", app])
+pub async fn mk_correct_output(files: &[String], app: &str, out: &str, tmp: &str) {
+    let mut cmd = Command::new(apps_bin_path("mrsequential"))
+        .arg(app)
         .args(files)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
-        .current_dir("tmp")
+        .current_dir(tmp)
         .spawn()
         .expect("failed to start mrsequential");
 
@@ -86,11 +108,11 @@ pub async fn mk_correct_output(files: &[String], app: &str, out: &str) {
         panic!("mrsequential failed with status: {}", stat);
     }
 
-    let out_path = Path::new("tmp").join(out);
+    let out_path = Path::new(tmp).join(out);
     let output_file =
         std::fs::File::create(&out_path).unwrap_or_else(|_| panic!("create {:?} failed", out));
 
-    let out_path = Path::new("tmp").join("mr-out-0");
+    let out_path = Path::new(tmp).join("mr-out-0");
     let mut cmd = Command::new("sort")
         .arg(&out_path)
         .stdout(output_file)
@@ -106,12 +128,12 @@ pub async fn mk_correct_output(files: &[String], app: &str, out: &str) {
     std::fs::remove_file(out_path).expect("unable to remove out file");
 }
 
-pub async fn merge_output(out: &str) {
-    let files = find_files("tmp", "mr-out-[0-9]").await;
+pub async fn merge_output(out: &str, tmp: &str) {
+    let files = find_files(tmp, "mr-out-[0-9]").await;
     if files.len() < 1 {
         panic!("reduce created no mr-out-X output files!");
     }
-    let output_path = Path::new("tmp").join(out);
+    let output_path = Path::new(tmp).join(out);
     let output_file =
         std::fs::File::create(&output_path).unwrap_or_else(|_| panic!("create {:?} failed", out));
 
@@ -140,6 +162,7 @@ pub async fn find_files(dir: &str, s: &str) -> Vec<String> {
     if out.is_empty() {
         vec![]
     } else {
+        println!("find_files {}", out);
         out.split('\n').map(|s| s.to_string()).collect()
     }
 }
@@ -152,22 +175,23 @@ pub async fn find_files_pre(dir: &str, s: &str, pre: &str) -> Vec<String> {
         .collect()
 }
 
-pub async fn mk_out() {
+pub async fn mk_out() -> String {
     let tmp = format!("mr-tmp-{}", rand_string(8));
-    DirBuilder::new().mode(0o755).create(tmp).await.unwrap();
+    DirBuilder::new().mode(0o755).create(&tmp).await.unwrap();
+    tmp
 }
 
-pub async fn cleanup() {
-    let files = find_files("tmp", "mr-*").await;
+pub async fn cleanup(tmp: &str) {
+    let files = find_files(tmp, "mr-*").await;
     for f in files {
         fs::remove_file(f).unwrap();
     }
 }
 
-pub async fn run_cmp(f1: &str, f2: &str, msg: &str) {
+pub async fn run_cmp(f1: &str, f2: &str, msg: &str, tmp: &str) {
     let mut cmp_cmd = Command::new("cmp")
         .args([f1, f2])
-        .current_dir("tmp")
+        .current_dir(tmp)
         .spawn()
         .expect("failed to start cmp");
 

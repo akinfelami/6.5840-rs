@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, hash::Hash, sync::Arc};
 
 use crate::rpc::{ExampleArgs, ExampleReply};
 use axum::{
@@ -7,6 +7,21 @@ use axum::{
     routing::post,
 };
 
+enum TaskState {
+    Idle,
+    InProgress,
+    Completed,
+}
+
+struct TaskMetadata {
+    state: TaskState,
+    assigned_at: Option<std::time::Instant>,
+}
+
+// /// key is the filename
+// map_tasks: HashMap<String, TaskMetadata>,
+// /// key is the reduce task number (which is %n_reduce)
+// reduce_tasks: HashMap<usize, TaskMetadata>,
 pub struct Coordinator {
     sockname: String,
     files: Vec<String>,
@@ -54,7 +69,7 @@ impl Coordinator {
     pub fn done(&self) -> bool {
         // Your code here.
         // TODO: implement this
-        false
+        true
     }
 
     /// start a thread that listens for RPCs from worker.rs

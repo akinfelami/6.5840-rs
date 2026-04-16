@@ -21,7 +21,7 @@ async fn main() {
 
     // w.worker(mrapps::wc::map, mrapps::wc::reduce);
     match env::args().nth(1).unwrap().as_str() {
-        "wc" => w.worker(mrapps::wc::map, mrapps::wc::reduce),
+        "wc" => w.worker(mrapps::wc::map, mrapps::wc::reduce).await,
         _ => {
             eprintln!("Unknown app: {}", env::args().nth(1).unwrap());
             std::process::exit(1);

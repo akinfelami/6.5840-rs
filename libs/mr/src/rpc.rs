@@ -8,3 +8,26 @@ pub struct ExampleArgs {
 pub struct ExampleReply {
     pub y: i32,
 }
+
+#[derive(Serialize, Debug, Deserialize)]
+pub enum TaskAssignment {
+    MapTask {
+        task_id: String,
+        filename: String,
+        n_reduce: usize,
+    },
+    ReduceTask {
+        task_id: String,
+        filenames: Vec<String>,
+        n_reduce: usize,
+    },
+    Wait,
+    Exit,
+}
+
+// my assumption: if worker is responding with Some(task_id), the task
+// completed, otherwise should be re-tried
+#[derive(Serialize, Debug, Deserialize)]
+pub struct TaskResponse {
+    pub task_id: Option<usize>,
+}

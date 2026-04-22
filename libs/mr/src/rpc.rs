@@ -29,5 +29,14 @@ pub enum TaskAssignment {
 // completed, otherwise should be re-tried
 #[derive(Serialize, Debug, Deserialize)]
 pub struct TaskResponse {
-    pub task_id: Option<usize>,
+    pub task_id: String,
+    pub task_type: TaskType,
+    pub success: bool,
+}
+
+#[derive(Serialize, Debug, Deserialize)]
+pub enum TaskType {
+    Map,
+    Reduce,
+    Unknown,
 }

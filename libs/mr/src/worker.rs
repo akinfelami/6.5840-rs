@@ -9,7 +9,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::rpc::{ExampleArgs, ExampleReply, TaskAssignment};
+use crate::rpc::{ExampleArgs, ExampleReply, TaskAssignment, TaskResponse, TaskType};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeyValue {
@@ -57,22 +57,7 @@ impl Worker {
                         "Worker: running map task {} on file {} with n_reduce {}",
                         task_id, filename, n_reduce
                     );
-                    let mut interm = Vec::new();
-                    let contents =
-                        std::fs::read_to_string(&filename).expect("failed to read input file");
-                    interm.extend(mapf(&filename, &contents));
-
-                    let buckets: Vec<File> = (0..n_reduce)
-                        .map(|i| std::fs::File::create(format!("mr-{}-{}", task_id, i)).unwrap())
-                        .collect();
-
-                    // TODO: note from lab -- use temp files and atomically rename incase worker crashes
-                    for kv in interm {
-                        let bk = (ihash(&kv.key) % n_reduce as u32) as usize;
-                        serde_json::to_writer(&buckets[bk], &kv)
-                            .expect("failed to write intermediate file");
-                    }
-                    self.report_task_to_coordinator(&task_id).await;
+                    self.map_phase(&filename, &mapf, n_reduce, &task_id).await;
                 }
                 TaskAssignment::ReduceTask {
                     task_id,
@@ -83,39 +68,7 @@ impl Worker {
                         "Worker: running reduce task {} on files {:?} with n_reduce {}",
                         task_id, filenames, n_reduce
                     );
-
-                    for filename in filenames {
-                        let f =
-                            std::fs::File::open(format!("mr-{}-{}", filename, task_id)).unwrap();
-                        let stream =
-                            serde_json::Deserializer::from_reader(f).into_iter::<KeyValue>();
-                        let mut kvs = vec![];
-                        for item in stream {
-                            let kv = item.unwrap();
-                            kvs.push(kv);
-                        }
-                        kvs.sort_by(|a, b| a.key.cmp(&b.key));
-                        let mut ofile = std::fs::File::create(format!("mr-out-{}", task_id))
-                            .expect("cannot create output file");
-
-                        // call reduce
-                        let mut i = 0;
-                        while i < kvs.len() {
-                            let mut j = i + 1;
-                            while j < kvs.len() && kvs[j].key == kvs[i].key {
-                                j += 1;
-                            }
-                            let mut values = Vec::new();
-                            for k in i..j {
-                                values.push(kvs[k].value.clone());
-                            }
-                            let output = reducef(&kvs[i].key, &values);
-                            writeln!(ofile, "{} {}", kvs[i].key, output)
-                                .expect("cannot write to output file");
-                            i = j;
-                        }
-                    }
-                    self.report_task_to_coordinator(&task_id).await;
+                    self.reduce_phase(&task_id, &filenames, &reducef).await;
                 }
 
                 TaskAssignment::Wait => {
@@ -126,6 +79,80 @@ impl Worker {
         }
     }
 
+    async fn map_phase<M: Fn(&str, &str) -> Vec<KeyValue>>(
+        &self,
+        filename: &str,
+        mapf: M,
+        n_reduce: usize,
+        task_id: &str,
+    ) {
+        let mut interm = Vec::new();
+        let contents = std::fs::read_to_string(&filename).expect("failed to read input file");
+        interm.extend(mapf(&filename, &contents));
+
+        let buckets: Vec<File> = (0..n_reduce)
+            .map(|i| std::fs::File::create(format!("mr-{}-{}", task_id, i)).unwrap())
+            .collect();
+
+        // TODO: note from lab -- use temp files and atomically rename incase worker crashes
+        for kv in interm {
+            let bk = (ihash(&kv.key) % n_reduce as u32) as usize;
+            serde_json::to_writer(&buckets[bk], &kv).expect("failed to write intermediate file");
+        }
+        let task_id = task_id.to_string();
+        self.report_task_to_coordinator(TaskResponse {
+            task_id,
+            task_type: TaskType::Map,
+            success: true,
+        })
+        .await;
+    }
+    async fn reduce_phase<R: Fn(&str, &[String]) -> String>(
+        &self,
+        task_id: &str,
+        filenames: &[String],
+        reducef: R,
+    ) {
+        let mut ofile = std::fs::File::create(format!("mr-out-{}", task_id))
+            .expect("cannot create output file");
+
+        for filename in filenames {
+            let f = std::fs::File::open(format!("mr-{}-{}", filename, task_id)).unwrap();
+            let stream = serde_json::Deserializer::from_reader(f).into_iter::<KeyValue>();
+            let mut kvs = vec![];
+            for item in stream {
+                let kv = item.unwrap();
+                kvs.push(kv);
+            }
+            kvs.sort_by(|a, b| a.key.cmp(&b.key));
+
+            // call reduce
+            let mut i = 0;
+            while i < kvs.len() {
+                let mut j = i + 1;
+                while j < kvs.len() && kvs[j].key == kvs[i].key {
+                    j += 1;
+                }
+                let mut values = Vec::new();
+                for k in i..j {
+                    values.push(kvs[k].value.clone());
+                }
+                let output = reducef(&kvs[i].key, &values);
+                writeln!(ofile, "{} {}", kvs[i].key, output).expect("cannot write to output file");
+                i = j;
+            }
+        }
+        let task_id = task_id.to_string();
+        self.report_task_to_coordinator({
+            TaskResponse {
+                task_id,
+                task_type: TaskType::Reduce,
+                success: true,
+            }
+        })
+        .await;
+    }
+
     async fn ask_coordinator_for_work(&self) -> TaskAssignment {
         match self
             .call::<(), TaskAssignment>("Coordinator.AskWork", &())
@@ -134,14 +161,14 @@ impl Worker {
             Some(resp) => resp,
             None => {
                 eprintln!("Worker: failed to ask coordinator for work");
-                TaskAssignment::Exit
+                TaskAssignment::Wait
             }
         }
     }
 
-    async fn report_task_to_coordinator(&self, task_id: &str) -> bool {
+    async fn report_task_to_coordinator(&self, task_response: TaskResponse) -> bool {
         match self
-            .call::<String, bool>("Coordinator.ReportTask", &task_id.to_string())
+            .call::<TaskResponse, bool>("Coordinator.ReportTask", &task_response)
             .await
         {
             Some(resp) => resp,

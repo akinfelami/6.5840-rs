@@ -2,7 +2,6 @@ use ::std::io::Write;
 use std::{
     fs::File,
     hash::{Hash, Hasher},
-    vec,
 };
 
 use anyhow::Context;
@@ -116,31 +115,30 @@ impl Worker {
         let mut ofile = std::fs::File::create(format!("mr-out-{}", task_id))
             .expect("cannot create output file");
 
+        let mut kvs = Vec::new();
         for filename in filenames {
             let f = std::fs::File::open(format!("mr-{}-{}", filename, task_id)).unwrap();
             let stream = serde_json::Deserializer::from_reader(f).into_iter::<KeyValue>();
-            let mut kvs = vec![];
             for item in stream {
                 let kv = item.unwrap();
                 kvs.push(kv);
             }
-            kvs.sort_by(|a, b| a.key.cmp(&b.key));
+        }
+        kvs.sort_by(|a, b| a.key.cmp(&b.key));
 
-            // call reduce
-            let mut i = 0;
-            while i < kvs.len() {
-                let mut j = i + 1;
-                while j < kvs.len() && kvs[j].key == kvs[i].key {
-                    j += 1;
-                }
-                let mut values = Vec::new();
-                for k in i..j {
-                    values.push(kvs[k].value.clone());
-                }
-                let output = reducef(&kvs[i].key, &values);
-                writeln!(ofile, "{} {}", kvs[i].key, output).expect("cannot write to output file");
-                i = j;
+        let mut i = 0;
+        while i < kvs.len() {
+            let mut j = i + 1;
+            while j < kvs.len() && kvs[j].key == kvs[i].key {
+                j += 1;
             }
+            let mut values = Vec::new();
+            for k in i..j {
+                values.push(kvs[k].value.clone());
+            }
+            let output = reducef(&kvs[i].key, &values);
+            writeln!(ofile, "{} {}", kvs[i].key, output).expect("cannot write to output file");
+            i = j;
         }
         let task_id = task_id.to_string();
         self.report_task_to_coordinator({
@@ -153,6 +151,8 @@ impl Worker {
         .await;
     }
 
+    // TODO: if coordinator does not respond, can assume the job is
+    // finished and can exit/
     async fn ask_coordinator_for_work(&self) -> TaskAssignment {
         match self
             .call::<(), TaskAssignment>("Coordinator.AskWork", &())

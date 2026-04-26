@@ -111,21 +111,6 @@ impl Coordinator {
         Ok(())
     }
 
-    async fn is_all_task_completed(&self, phase: Phase) -> bool {
-        let slock = self.state.lock().await;
-        match phase {
-            Phase::Map => slock
-                .map_tasks
-                .values()
-                .all(|meta| meta.state == TaskState::Completed),
-            Phase::Reduce => slock
-                .reduce_tasks
-                .values()
-                .all(|meta| meta.state == TaskState::Completed),
-            Phase::Done => true,
-        }
-    }
-
     // TODO: need to handle case where worker fails in the middle of a task, and the task needs to be re-assigned after some timeout
     pub async fn provide_work(&self) -> TaskAssignment {
         let mut slock = self.state.lock().await;
@@ -136,7 +121,11 @@ impl Coordinator {
                 return TaskAssignment::Exit;
             }
             Phase::Map => {
-                if self.is_all_task_completed(Phase::Map).await {
+                let all_done = slock
+                    .map_tasks
+                    .values()
+                    .all(|meta| meta.state == TaskState::Completed);
+                if all_done {
                     println!("All map tasks completed, moving to reduce phase");
                     slock.phase = Phase::Reduce;
                 } else {
@@ -155,7 +144,11 @@ impl Coordinator {
                 }
             }
             Phase::Reduce => {
-                if self.is_all_task_completed(Phase::Reduce).await {
+                let all_done = slock
+                    .reduce_tasks
+                    .values()
+                    .all(|meta| meta.state == TaskState::Completed);
+                if all_done {
                     println!("All reduce tasks completed, map reduce job done");
                     slock.phase = Phase::Done;
                 } else {
